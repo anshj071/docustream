@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.config import settings
 from app.db.session import get_db
+from app.api.api import api_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -19,6 +20,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount all API v1 endpoints
+app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():
