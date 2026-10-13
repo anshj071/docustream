@@ -35,7 +35,7 @@ services:
     environment:
       DATABASE_URL: postgresql://docustream_user:secretpassword@db:5432/docustream
       REDIS_URL: redis://redis:6379/0
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       SECRET_KEY: ${SECRET_KEY:-super-secret-docustream-jwt-key-change-in-production-abcdef123456}
     ports:
       - "8000:8000"
@@ -56,7 +56,7 @@ services:
     environment:
       DATABASE_URL: postgresql://docustream_user:secretpassword@db:5432/docustream
       REDIS_URL: redis://redis:6379/0
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
