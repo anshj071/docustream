@@ -11,10 +11,10 @@ def semantic_search(db: Session, query: str, document_id: int, top_k: int = 5) -
     results = db.execute(
         text("""
             SELECT id, content, page_number, chunk_index,
-                   1 - (embedding <=> :embedding::vector) AS relevance_score
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS relevance_score
             FROM document_chunks
             WHERE document_id = :doc_id AND embedding IS NOT NULL
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
         """),
         {"embedding": embedding_str, "doc_id": document_id, "top_k": top_k}
@@ -40,11 +40,11 @@ def global_search(db: Session, query: str, user_id: int, top_k: int = 10) -> lis
     results = db.execute(
         text("""
             SELECT dc.id, dc.content, dc.page_number, dc.chunk_index, dc.document_id,
-                   1 - (dc.embedding <=> :embedding::vector) AS relevance_score
+                   1 - (dc.embedding <=> CAST(:embedding AS vector)) AS relevance_score
             FROM document_chunks dc
             JOIN documents d ON dc.document_id = d.id
             WHERE d.user_id = :user_id AND dc.embedding IS NOT NULL
-            ORDER BY dc.embedding <=> :embedding::vector
+            ORDER BY dc.embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
         """),
         {"embedding": embedding_str, "user_id": user_id, "top_k": top_k}
