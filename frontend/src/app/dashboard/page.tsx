@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 
@@ -30,6 +30,20 @@ export default function DashboardPage() {
     fetchDocuments();
   }, [router, fetchDocuments]);
 
+  // Auto-poll while any document is PENDING or PROCESSING
+  useEffect(() => {
+    const hasProcessing = documents.some(
+      (doc) => doc.status === 'PENDING' || doc.status === 'PROCESSING'
+    );
+    if (!hasProcessing) return;
+
+    const interval = setInterval(() => {
+      fetchDocuments();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [documents, fetchDocuments]);
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -38,11 +52,13 @@ export default function DashboardPage() {
     formData.append('file', file);
     try {
       await api.post('/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      fetchDocuments();
+      await fetchDocuments();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Upload failed');
     } finally {
       setUploading(false);
+      // Reset input so the same file can be re-selected if desired
+      e.target.value = '';
     }
   };
 
@@ -61,7 +77,7 @@ export default function DashboardPage() {
 
   const statusColor = (s: string) => {
     if (s === 'COMPLETED') return 'bg-green-100 text-green-700';
-    if (s === 'PROCESSING') return 'bg-yellow-100 text-yellow-700';
+    if (s === 'PROCESSING') return 'bg-yellow-100 text-yellow-700 animate-pulse';
     if (s === 'FAILED') return 'bg-red-100 text-red-700';
     return 'bg-gray-100 text-gray-700';
   };
@@ -98,7 +114,9 @@ export default function DashboardPage() {
                 <p className="text-sm text-gray-400">{new Date(doc.created_at).toLocaleString()}</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor(doc.status)}`}>{doc.status}</span>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor(doc.status)}`}>
+                  {doc.status}
+                </span>
                 <button onClick={() => handleDelete(doc.id)} className="text-red-400 hover:text-red-600 text-sm">Delete</button>
               </div>
             </div>

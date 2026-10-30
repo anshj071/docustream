@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
 
@@ -24,11 +24,32 @@ export default function DocumentPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const fetchDocument = useCallback(async () => {
+    try {
+      const res = await api.get(`/documents/${docId}`);
+      setDocument(res.data);
+    } catch {
+      router.push('/dashboard');
+    }
+  }, [docId, router]);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { router.push('/login'); return; }
-    api.get(`/documents/${docId}`).then(res => setDocument(res.data)).catch(() => router.push('/dashboard'));
-  }, [docId, router]);
+    fetchDocument();
+  }, [fetchDocument, router]);
+
+  // Auto-poll if document is not yet COMPLETED or FAILED
+  useEffect(() => {
+    if (!document) return;
+    if (document.status === 'COMPLETED' || document.status === 'FAILED') return;
+
+    const interval = setInterval(() => {
+      fetchDocument();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [document, fetchDocument]);
 
   const handleAsk = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +76,12 @@ export default function DocumentPage() {
         <button onClick={() => router.push('/dashboard')} className="text-gray-500 hover:text-gray-700">&larr; Back</button>
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{document.filename}</h1>
-          <p className="text-sm text-gray-500">Status: {document.status}</p>
+          <p className="text-sm text-gray-500">
+            Status:{' '}
+            <span className={`font-semibold ${document.status === 'COMPLETED' ? 'text-green-600' : document.status === 'FAILED' ? 'text-red-600' : 'text-yellow-600'}`}>
+              {document.status}
+            </span>
+          </p>
         </div>
       </div>
 
@@ -97,8 +123,14 @@ export default function DocumentPage() {
           />
           <button type="submit" disabled={loading} className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50">Ask</button>
         </form>
+      ) : document.status === 'FAILED' ? (
+        <div className="text-center text-red-600 bg-red-50 p-3 rounded-lg">
+          Document processing failed. Please delete this document and try uploading again.
+        </div>
       ) : (
-        <div className="text-center text-yellow-600 bg-yellow-50 p-3 rounded-lg">Document is still being processed ({document.status}). Please wait.</div>
+        <div className="text-center text-yellow-600 bg-yellow-50 p-3 rounded-lg animate-pulse">
+          Document is currently being processed ({document.status}). It will automatically be ready in a few seconds...
+        </div>
       )}
     </div>
   );
