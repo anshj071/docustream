@@ -21,8 +21,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns True if valid, False otherwise.
     """
     password_bytes = plain_password.encode("utf-8")
+    # bcrypt only processes the first 72 bytes; reject longer passwords instead
+    # of allowing silent truncation or a backend exception.
+    if len(password_bytes) > 72:
+        return False
     hashed_bytes = hashed_password.encode("utf-8")
-    return bcrypt.checkpw(password_bytes, hashed_bytes)
+    try:
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+    except (ValueError, TypeError):
+        return False
 
 
 def create_access_token(subject: str | int, expires_delta: timedelta | None = None) -> str:

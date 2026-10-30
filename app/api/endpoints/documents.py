@@ -1,4 +1,5 @@
 import os
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, status
 from sqlalchemy.orm import Session
 
@@ -18,14 +19,15 @@ router = APIRouter()
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
-def upload_document(
+async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Upload a PDF document for processing."""
-    if not file.filename.lower().endswith(".pdf"):
+    original_filename = file.filename or ""
+    if not original_filename.lower().endswith(".pdf"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only PDF files are supported.",
@@ -34,34 +36,48 @@ def upload_document(
     user_upload_dir = os.path.join(settings.UPLOAD_DIR, str(current_user.id))
     os.makedirs(user_upload_dir, exist_ok=True)
 
-    safe_filename = os.path.basename(file.filename)
-    file_path = os.path.join(user_upload_dir, safe_filename)
-
-    file.file.seek(0)
-    content = file.file.read()
-    if len(content) > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File exceeds maximum allowed size of {settings.MAX_FILE_SIZE_MB}MB.",
-        )
-
-    with open(file_path, "wb") as f:
-        f.write(content)
-        f.flush()
-        try:
-            os.fsync(f.fileno())
-        except OSError:
-            pass
+    display_filename = os.path.basename(original_filename.replace("\\", "/"))[:255]
+    file_path = os.path.join(user_upload_dir, f"{uuid.uuid4().hex}.pdf")
+    max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+    bytes_written = 0
+    header = b""
+    try:
+        with open(file_path, "wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                bytes_written += len(chunk)
+                if bytes_written > max_bytes:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"File exceeds maximum allowed size of {settings.MAX_FILE_SIZE_MB}MB.",
+                    )
+                if len(header) < 1024:
+                    header += chunk[: 1024 - len(header)]
+                f.write(chunk)
+            if b"%PDF-" not in header:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The uploaded file does not appear to be a valid PDF.",
+                )
+    except Exception:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
 
     document = Document(
         user_id=current_user.id,
-        filename=file.filename,
+        filename=display_filename,
         file_path=file_path,
         status="PENDING",
     )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
+    try:
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+    except Exception:
+        db.rollback()
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
 
     # Dispatch background processing task
     background_tasks.add_task(process_document, document.id)
@@ -116,14 +132,14 @@ def delete_document(
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
 
-    if os.path.exists(document.file_path):
-        try:
-            os.remove(document.file_path)
-        except OSError:
-            pass
-
+    file_path = document.file_path
     db.delete(document)
     db.commit()
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
     return None
 
 

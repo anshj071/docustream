@@ -37,7 +37,7 @@ services:
       DATABASE_URL: postgresql://docustream_user:secretpassword@db:5432/docustream
       REDIS_URL: redis://redis:6379/0
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      SECRET_KEY: ${SECRET_KEY:-super-secret-docustream-jwt-key-change-in-production-abcdef123456}
+      SECRET_KEY: ${SECRET_KEY:?Set a unique SECRET_KEY in .env}
     ports:
       - "8000:8000"
     volumes:

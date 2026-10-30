@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class DocumentResponse(BaseModel):
@@ -18,8 +18,16 @@ class DocumentListResponse(BaseModel):
 
 
 class QuestionRequest(BaseModel):
-    question: str
-    top_k: int = 5
+    question: str = Field(min_length=1, max_length=4000)
+    top_k: int = Field(default=5, ge=1, le=10)
+
+    @field_validator("question")
+    @classmethod
+    def question_must_contain_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Question cannot be blank.")
+        return value
 
 
 class Citation(BaseModel):

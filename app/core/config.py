@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
         return url
 
     # JWT Authentication
-    SECRET_KEY: str = "super-secret-docustream-jwt-key-change-in-production-abcdef123456"
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
@@ -33,6 +34,24 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60
+    CORS_ORIGINS: str = "https://docustream.vercel.app,http://localhost:3000"
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, value: str) -> str:
+        weak_keys = {
+            "super-secret-docustream-jwt-key-change-in-production-abcdef123456",
+            "change-me",
+            "secret",
+            "replace-this-with-a-unique-random-secret-of-32-or-more-characters",
+        }
+        if len(value) < 32 or value in weak_keys:
+            raise ValueError("SECRET_KEY must be a unique random value of at least 32 characters.")
+        return value
+
+    @property
+    def ALLOWED_ORIGINS(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     class Config:
         env_file = ".env"

@@ -1,8 +1,11 @@
 import axios from 'axios';
 
-const apiBase = process.env.NEXT_PUBLIC_API_URL
-  ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '')}/api/v1`
-  : '/api/v1';
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const apiBase = configuredApiUrl
+  ? `${configuredApiUrl.replace(/\/+$/, '')}/api/v1`
+  : process.env.NODE_ENV === 'development'
+    ? '/api/v1'
+    : (() => { throw new Error('NEXT_PUBLIC_API_URL must be set to the Render backend URL in Vercel.'); })();
 
 const api = axios.create({
   baseURL: apiBase,

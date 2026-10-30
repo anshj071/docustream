@@ -26,9 +26,9 @@ Reading through 50-page financial reports, legal contracts, research papers, or 
 ## ✨ Key Features
 
 - **📄 Intelligent PDF Ingestion**: Extracts text page-by-page using `PyMuPDF` and splits content with sliding-window chunking (500 characters with 100-character overlap) to preserve context across boundaries.
-- **🧠 768-Dimension Vector Embeddings**: Generates dense semantic vector embeddings for every chunk using Google's state-of-the-art `text-embedding-004` model.
+- **🧠 768-Dimension Vector Embeddings**: Generates dense semantic vector embeddings for every chunk using Google's `gemini-embedding-001` model.
 - **⚡ pgvector Semantic Similarity Search**: Indexes and queries document embeddings directly in PostgreSQL using cosine distance (`<=>`), retrieving the top-K most relevant chunks in milliseconds.
-- **🛡️ Hallucination-Resistant RAG**: Prompts `gemini-1.5-flash` with strict grounding instructions: answers are synthesized *only* from retrieved document context, preventing false claims.
+- **🛡️ Grounded RAG**: Prompts `gemini-3.5-flash-lite` to answer from retrieved document excerpts and cite supporting page numbers. Document excerpts are treated as untrusted input.
 - **📌 Interactive Citations**: Every AI response includes expandable citation cards showing the exact page number and text snippet from the document.
 - **🔐 Multi-Tenant Security & Isolation**: Full user authentication with `bcrypt` password hashing and stateless JWT tokens. Users can only view, search, and delete their own files.
 - **⏱️ Non-blocking Background Tasks**: File processing runs asynchronously via FastAPI's native `BackgroundTasks`, keeping uploads fast and responsive without requiring Redis or Celery.
@@ -50,7 +50,7 @@ Reading through 50-page financial reports, legal contracts, research papers, or 
 [ Document Processor ]
    ├─► 1. PyMuPDF extracts text page-by-page
    ├─► 2. Sliding-window chunker divides text into overlapping segments
-   ├─► 3. Google Gemini (text-embedding-004) generates 768-dim vector embeddings
+   ├─► 3. Google Gemini (gemini-embedding-001) generates 768-dim vector embeddings
    └─► 4. Inserts chunks + embeddings into PostgreSQL `document_chunks` table
          │
          ▼
@@ -63,12 +63,12 @@ Reading through 50-page financial reports, legal contracts, research papers, or 
          ▼
 [ FastAPI /api/v1/documents/{id}/ask ]
          │
-         ├─► 1. Generates query vector via Gemini text-embedding-004
+         ├─► 1. Generates query vector via Gemini gemini-embedding-001
          ├─► 2. pgvector runs cosine similarity search:
          │      SELECT content, page_number FROM document_chunks 
          │      WHERE document_id = :id ORDER BY embedding <=> :query_vec LIMIT 5
          ├─► 3. Constructs augmented prompt with retrieved context
-         ├─► 4. Gemini 1.5 Flash synthesizes grounded answer
+         ├─► 4. Gemini 3.5 Flash-Lite synthesizes a grounded answer
          │
          ▼
 [ Response returned to User: Answer + Exact Page Citations ]
@@ -83,7 +83,7 @@ Reading through 50-page financial reports, legal contracts, research papers, or 
 | **Frontend** | **Next.js 14 (App Router)**, React 18, Tailwind CSS | Responsive chat UI, file upload dashboard, auth |
 | **Backend** | **FastAPI** (Python 3.13) | High-performance RESTful API, asynchronous tasks |
 | **Database** | **PostgreSQL 16 + pgvector** | Relational user/document metadata + vector storage |
-| **AI / Embeddings** | **Google Gemini** (`text-embedding-004` & `gemini-1.5-flash`) | Vector embeddings generation and contextual Q&A |
+| **AI / Embeddings** | **Google Gemini** (`gemini-embedding-001` & `gemini-3.5-flash-lite`) | Vector embeddings and contextual Q&A |
 | **PDF Processing** | **PyMuPDF** (`pymupdf`) | High-speed page-by-page text extraction |
 | **Auth** | **JWT** (`PyJWT`), `bcrypt` | Secure authentication, password hashing, user isolation |
 | **Database ORM** | **SQLAlchemy 2.0**, **Alembic** | Schema modeling and database migration tracking |
@@ -91,9 +91,9 @@ Reading through 50-page financial reports, legal contracts, research papers, or 
 
 ---
 
-## 🌐 100% Free Cloud Deployment Guide
+## 🌐 Cloud Deployment (Vercel + Render + Neon)
 
-Get a live, public, clickable URL in under 5 minutes:
+The production frontend is hosted on Vercel, the FastAPI backend on Render, and PostgreSQL with pgvector on Neon. Free-tier behavior and availability depend on each provider's current plan.
 
 ### 1. Free Cloud Database (Neon)
 1. Go to **[neon.tech](https://neon.tech)** and sign up with GitHub.
@@ -111,7 +111,7 @@ Get a live, public, clickable URL in under 5 minutes:
 2. Click **New +** $\rightarrow$ **Web Service**.
 3. Select your `docustream` GitHub repository.
 4. Configure service:
-   - **Name:** `docustream-api`
+   - **Name:** `docustream-api` (or keep the service name configured in your Render project)
    - **Runtime:** `Python 3`
    - **Build Command:** `pip install -r requirements.txt && alembic upgrade head`
    - **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
@@ -119,7 +119,8 @@ Get a live, public, clickable URL in under 5 minutes:
 5. Under **Environment Variables**, add:
    - `DATABASE_URL`: *(Paste your Neon connection string)*
    - `GEMINI_API_KEY`: *(Your Google Gemini API key from [aistudio.google.com](https://aistudio.google.com/))*
-   - `SECRET_KEY`: *(Any random 32+ character string, e.g. `super-secret-docustream-jwt-key-xyz123`)*
+   - `SECRET_KEY`: *(A unique random value of at least 32 characters; do not use the sample value from `.env.example`.)*
+   - `CORS_ORIGINS`: *(Optional comma-separated browser origins. Defaults include `https://docustream.vercel.app` and `http://localhost:3000`. Add your custom Vercel domain here if you use one.)*
 6. Click **Deploy Web Service**.
 7. Copy your live Render URL (e.g. `https://docustream-api.onrender.com`).
 
@@ -132,9 +133,23 @@ Get a live, public, clickable URL in under 5 minutes:
 4. Next to **Root Directory**, click **Edit** and choose **`frontend`**, then click **Continue**.
 5. Under **Environment Variables**, add:
    - **Key:** `NEXT_PUBLIC_API_URL`
-   - **Value:** `https://docustream-api.onrender.com` *(Your Render backend URL, without trailing slash)*
+   - **Value:** `https://your-render-service.onrender.com` *(Your actual Render backend URL, without a trailing slash; for example, `https://docustream-api.onrender.com`)*
 6. Click **Deploy**.
 7. 🎉 Vercel provides you with a shareable live HTTPS link (e.g., `https://docustream.vercel.app`)!
+
+After changing an environment variable, redeploy the affected service. The frontend variable is embedded in the Vercel build, so changing `NEXT_PUBLIC_API_URL` requires a new frontend deployment.
+
+### Deploy code updates
+
+Commit and push the code to the branch connected to Render and Vercel. Wait for both deployments to finish successfully before retrying the app. A backend-only fix still needs a Render deployment; a frontend-only fix needs a Vercel deployment.
+
+### Troubleshooting PDF questions
+
+- A PDF must show **COMPLETED** before it can be queried.
+- Check `https://<your-render-service>.onrender.com/health`; a healthy response includes `{"status":"ok","database":"connected"}`.
+- If asking returns an error, open the Render service logs and inspect the traceback for the `POST /api/v1/documents/{id}/ask` request.
+- Vector search casts the query embedding to pgvector with a bound SQL parameter. If you see a SQL syntax error near `:embedding`, deploy the latest backend code.
+- A previous migration changed embeddings from 1536 to 768 dimensions and deletes existing chunk rows as part of that conversion. PDFs processed before that migration may need to be uploaded again if they no longer have indexed chunks.
 
 ---
 
@@ -155,7 +170,7 @@ Get a live, public, clickable URL in under 5 minutes:
    pip install -r requirements.txt
    ```
 3. **Configure `.env`:**
-   Copy `.env.example` to `.env` and set your `DATABASE_URL` and `GEMINI_API_KEY`.
+   Copy `.env.example` to `.env` and set your `DATABASE_URL`, `GEMINI_API_KEY`, and a unique random `SECRET_KEY` of at least 32 characters. The example secret is intentionally rejected until replaced.
 4. **Run migrations:**
    ```powershell
    alembic upgrade head
@@ -174,6 +189,8 @@ Get a live, public, clickable URL in under 5 minutes:
    npm run dev
    ```
 2. Open **[http://localhost:3000](http://localhost:3000)** in your browser.
+
+The API allows the production Vercel origin and `http://localhost:3000` by default. If you use another frontend domain locally or in production, add its exact origin to `CORS_ORIGINS` on the backend as a comma-separated value.
 
 ---
 

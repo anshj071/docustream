@@ -52,6 +52,10 @@ def process_document(document_id: int):
         for i in range(0, len(chunks), batch_size):
             batch_texts = [c.content for c in chunks[i:i + batch_size]]
             batch_embeddings = generate_embeddings(batch_texts)
+            if len(batch_embeddings) != len(batch_texts) or any(
+                len(embedding) != settings.EMBEDDING_DIMENSIONS for embedding in batch_embeddings
+            ):
+                raise ValueError("Embedding service returned an invalid number of vectors or dimensions.")
             all_embeddings.extend(batch_embeddings)
 
         print(f"[TASK] Generated {len(all_embeddings)} embeddings. Saving to database...")

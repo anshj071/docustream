@@ -62,7 +62,11 @@ export default function DocumentPage() {
       const res = await api.post(`/documents/${docId}/ask`, { question: userQuestion, top_k: 5 });
       setMessages(prev => [...prev, { role: 'assistant', content: res.data.answer, citations: res.data.citations }]);
     } catch (err: any) {
-      setMessages(prev => [...prev, { role: 'assistant', content: err.response?.data?.detail || 'Failed to get answer.' }]);
+      const message = err.response?.data?.detail
+        || (err.response
+          ? `The answer request failed (HTTP ${err.response.status}). Please try again.`
+          : 'Could not reach the DocuStream API. Check that the backend is running and the frontend API URL is configured.');
+      setMessages(prev => [...prev, { role: 'assistant', content: message }]);
     } finally {
       setLoading(false);
     }
