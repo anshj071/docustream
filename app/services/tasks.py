@@ -2,7 +2,6 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
-from app.celery_app import celery_app
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.services.pdf_service import extract_text_from_pdf, chunk_text
@@ -10,13 +9,12 @@ from app.services.embedding_service import generate_embeddings
 
 logger = logging.getLogger(__name__)
 
-# Dedicated engine for Celery worker process
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+# Engine for background tasks
+engine = create_engine(settings.SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-@celery_app.task(bind=True, name="process_document")
-def process_document(self, document_id: int):
+def process_document(document_id: int):
     """Background task to extract, chunk, embed, and index a document."""
     db = SessionLocal()
     try:

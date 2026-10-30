@@ -32,6 +32,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: docustream_backend
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       DATABASE_URL: postgresql://docustream_user:secretpassword@db:5432/docustream
       REDIS_URL: redis://redis:6379/0

@@ -2,14 +2,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
-# The engine handles the physical connection pool to PostgreSQL
+# The engine handles the connection pool to PostgreSQL
 engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True  # Checks if the DB connection is alive before using it
+    settings.SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True
 )
 
 # SessionLocal is a factory for creating individual database sessions
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 def get_db():
     """

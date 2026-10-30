@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -19,6 +19,7 @@ router = APIRouter()
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -54,13 +55,8 @@ def upload_document(
     db.commit()
     db.refresh(document)
 
-    # Dispatch Celery background task
-    try:
-        process_document.delay(document.id)
-    except Exception:
-        # If Celery/Redis is currently offline during direct local development,
-        # task will remain PENDING and can be picked up or retried
-        pass
+    # Dispatch background processing task
+    background_tasks.add_task(process_document, document.id)
 
     return document
 

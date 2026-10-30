@@ -6,24 +6,27 @@ class Settings(BaseSettings):
     PROJECT_VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
 
+    # Database
     DATABASE_URL: str = "postgresql://docustream_user:secretpassword@localhost:5432/docustream"
 
-    # JWT
+    @property
+    def SQLALCHEMY_DATABASE_URL(self) -> str:
+        url = self.DATABASE_URL
+        # Render and some cloud providers provide postgres:// instead of postgresql://
+        if url and url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return url
+
+    # JWT Authentication
     SECRET_KEY: str = "super-secret-docustream-jwt-key-change-in-production-abcdef123456"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
-
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
 
     # Google Gemini API
     GEMINI_API_KEY: str = ""
     EMBEDDING_MODEL: str = "text-embedding-004"
     EMBEDDING_DIMENSIONS: int = 768
     LLM_MODEL: str = "gemini-1.5-flash"
-
-    # Backward compatibility / fallback
-    OPENAI_API_KEY: str = ""
 
     # Upload
     UPLOAD_DIR: str = "uploads"
@@ -34,6 +37,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()
