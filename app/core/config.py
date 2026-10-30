@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     @property
     def SQLALCHEMY_DATABASE_URL(self) -> str:
         url = self.DATABASE_URL
-        # Render and some cloud providers provide postgres:// instead of postgresql://
         if url and url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
         return url
@@ -24,9 +23,9 @@ class Settings(BaseSettings):
 
     # Google Gemini API
     GEMINI_API_KEY: str = ""
-    EMBEDDING_MODEL: str = "text-embedding-004"
+    EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIMENSIONS: int = 768
-    LLM_MODEL: str = "gemini-1.5-flash"
+    LLM_MODEL: str = "gemini-3.5-flash-lite"
 
     # Upload
     UPLOAD_DIR: str = "uploads"

@@ -1,5 +1,6 @@
 import os
 from google import genai
+from google.genai import types
 from app.core.config import settings
 
 
@@ -10,22 +11,24 @@ def get_gemini_client() -> genai.Client:
 
 
 def generate_embeddings(texts: list[str]) -> list[list[float]]:
-    """Generate vector embeddings for a list of text strings using Google Gemini text-embedding-004."""
+    """Generate vector embeddings for a list of text strings using Google Gemini."""
     if not texts:
         return []
 
     client = get_gemini_client()
+    config = types.EmbedContentConfig(output_dimensionality=settings.EMBEDDING_DIMENSIONS)
     embeddings = []
 
     for text in texts:
         result = client.models.embed_content(
             model=settings.EMBEDDING_MODEL,
             contents=text,
+            config=config,
         )
-        if hasattr(result, "embedding") and result.embedding:
-            embeddings.append(result.embedding.values)
-        elif hasattr(result, "embeddings") and result.embeddings:
+        if hasattr(result, "embeddings") and result.embeddings:
             embeddings.append(result.embeddings[0].values)
+        elif hasattr(result, "embedding") and result.embedding:
+            embeddings.append(result.embedding.values)
         else:
             embeddings.append([])
 
