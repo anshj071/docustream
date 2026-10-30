@@ -34,7 +34,10 @@ def upload_document(
     user_upload_dir = os.path.join(settings.UPLOAD_DIR, str(current_user.id))
     os.makedirs(user_upload_dir, exist_ok=True)
 
-    file_path = os.path.join(user_upload_dir, file.filename)
+    safe_filename = os.path.basename(file.filename)
+    file_path = os.path.join(user_upload_dir, safe_filename)
+
+    file.file.seek(0)
     content = file.file.read()
     if len(content) > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
         raise HTTPException(
@@ -44,6 +47,11 @@ def upload_document(
 
     with open(file_path, "wb") as f:
         f.write(content)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass
 
     document = Document(
         user_id=current_user.id,

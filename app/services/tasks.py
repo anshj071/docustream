@@ -1,4 +1,5 @@
 import logging
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
@@ -16,44 +17,46 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def process_document(document_id: int):
     """Background task to extract, chunk, embed, and index a document."""
+    print(f"[TASK] Starting background processing for document_id={document_id}")
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:
-            logger.error(f"Document {document_id} not found")
+            print(f"[TASK ERROR] Document {document_id} not found in database")
             return {"status": "FAILED", "error": "Document not found"}
 
         # Mark as PROCESSING
         document.status = "PROCESSING"
         db.commit()
+        print(f"[TASK] Document {document_id} ({document.filename}) status set to PROCESSING")
 
         # 1. Extract text from PDF
-        logger.info(f"Extracting text from {document.filename}")
+        if not os.path.exists(document.file_path):
+            raise FileNotFoundError(f"File not found on disk at: {document.file_path}")
+
+        print(f"[TASK] Extracting text from {document.file_path}")
         pages = extract_text_from_pdf(document.file_path)
         if not pages:
-            document.status = "FAILED"
-            db.commit()
-            return {"status": "FAILED", "error": "No text extracted from document"}
+            raise ValueError("No text could be extracted from this PDF. It may be an image-only scan.")
 
         # 2. Chunk text
-        logger.info(f"Chunking text from {document.filename}")
+        print(f"[TASK] Chunking {len(pages)} pages of text")
         chunks = chunk_text(pages)
         if not chunks:
-            document.status = "FAILED"
-            db.commit()
-            return {"status": "FAILED", "error": "Document produced no text chunks"}
+            raise ValueError("Document produced no text chunks after extraction.")
 
-        # 3. Generate embeddings in batches
-        logger.info(f"Generating embeddings for {len(chunks)} chunks")
-        batch_size = 50
+        # 3. Generate embeddings
+        print(f"[TASK] Generating embeddings for {len(chunks)} chunks with Gemini...")
+        batch_size = 20
         all_embeddings = []
         for i in range(0, len(chunks), batch_size):
             batch_texts = [c.content for c in chunks[i:i + batch_size]]
             batch_embeddings = generate_embeddings(batch_texts)
             all_embeddings.extend(batch_embeddings)
 
+        print(f"[TASK] Generated {len(all_embeddings)} embeddings. Saving to database...")
+
         # 4. Save chunks with embeddings into database
-        logger.info(f"Saving {len(chunks)} chunks to database")
         for chunk, embedding in zip(chunks, all_embeddings):
             db_chunk = DocumentChunk(
                 document_id=document.id,
@@ -66,18 +69,36 @@ def process_document(document_id: int):
 
         document.status = "COMPLETED"
         db.commit()
-        logger.info(f"Document {document.filename} (ID: {document.id}) successfully processed")
+        print(f"[TASK SUCCESS] Document {document.filename} (ID: {document.id}) successfully COMPLETED with {len(chunks)} chunks!")
         return {"status": "COMPLETED", "chunks": len(chunks)}
 
     except Exception as e:
+        print(f"[TASK EXCEPTION] Error processing document {document_id}: {str(e)}")
         logger.error(f"Error processing document {document_id}: {str(e)}", exc_info=True)
         try:
-            document = db.query(Document).filter(Document.id == document_id).first()
-            if document:
-                document.status = "FAILED"
-                db.commit()
-        except Exception:
             db.rollback()
+        except Exception:
+            pass
+        finally:
+            db.close()
+
+        # Record failure status in a clean, fresh transaction
+        fail_db = SessionLocal()
+        try:
+            doc = fail_db.query(Document).filter(Document.id == document_id).first()
+            if doc:
+                doc.status = "FAILED"
+                fail_db.commit()
+                print(f"[TASK] Document {document_id} status updated to FAILED")
+        except Exception as inner_e:
+            print(f"[TASK ERROR] Failed to record FAILED status for document {document_id}: {inner_e}")
+            fail_db.rollback()
+        finally:
+            fail_db.close()
+
         return {"status": "FAILED", "error": str(e)}
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            pass
